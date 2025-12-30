@@ -3,14 +3,13 @@ import { json } from 'body-parser';
 import fs from 'fs';
 import path from 'path';
 
-// 1. Configuration - ONLY DECLARED ONCE
 const PACKAGE_NAME = process.env.PACKAGE_NAME || 'com.kolbypezan.gymhud';
 const MENTRAOS_API_KEY = process.env.MENTRAOS_API_KEY || '';
 const PORT = parseInt(process.env.PORT || '8080'); 
 
-// 2. Persistence Logic
-const DATA_DIR = './data';
-if (!fs.existsSync(DATA_DIR)) { fs.mkdirSync(DATA_DIR); }
+// Persistence: Ensure the data directory exists for cloud storage
+const DATA_DIR = path.join(process.cwd(), 'data');
+if (!fs.existsSync(DATA_DIR)) { fs.mkdirSync(DATA_DIR, { recursive: true }); }
 const MACRO_CACHE_PATH = path.join(DATA_DIR, 'macro-cache.json');
 
 let currentMacros = fs.existsSync(MACRO_CACHE_PATH) 
@@ -90,31 +89,24 @@ class IntegratedHUD extends AppServer {
     activeAppSession = session;
     this.refreshDisplay();
 
-        session.events.onTranscription((data) => {
-      // Log immediately so you can see the speed in Railway Logs
+    session.events.onTranscription((data) => {
       const speech = data.text.toLowerCase();
-      console.log("Live Hearing:", speech);
-
-      // ACTION 1: Quick-Switch (Don't wait for isFinal)
-      // This makes the screen flip the MOMENT you finish saying the word
-      if (speech.includes("gym") || speech.includes("jim")) {
-        currentView = 'GYM';
-        this.currentDay = null; 
-        this.refreshDisplay();
-        // We don't return here because we want to see if they say a day next
-      }
       
-      if (speech.includes("macro")) {
-        currentView = 'MACRO';
-        this.refreshDisplay();
-      }
-
+      // INSTANT COMMANDS (Navigation)
       if (speech.includes("off") || speech.includes("shut")) {
-        currentView = 'OFF';
-        this.refreshDisplay();
+        currentView = 'OFF'; this.refreshDisplay(); return;
+      }
+      if (speech.includes("gym") || speech.includes("jim")) {
+        currentView = 'GYM'; this.currentDay = null; this.refreshDisplay(); return;
+      }
+      if (speech.includes("macro")) {
+        currentView = 'MACRO'; this.refreshDisplay(); return;
+      }
+      if (speech.includes("menu")) {
+        this.currentDay = null; this.refreshDisplay(); return;
       }
 
-      // ACTION 2: Progression (Use isFinal here to prevent double-skipping)
+      // PROGRESSION COMMANDS (Wait for isFinal to prevent double-skipping)
       if (!data.isFinal) return;
 
       if (currentView === 'GYM' && !this.currentDay) {
@@ -131,9 +123,14 @@ class IntegratedHUD extends AppServer {
           else if (this.exIdx < workouts[this.currentDay].length - 1) { this.exIdx++; this.setNum = 1; }
           this.refreshDisplay();
         }
+        if (speech.includes("back")) {
+          if (restTimer) { clearInterval(restTimer); restTimer = null; secondsRemaining = 0; }
+          if (this.setNum > 1) { this.setNum--; }
+          else if (this.exIdx > 0) { this.exIdx--; this.setNum = workouts[this.currentDay][this.exIdx].sets; }
+          this.refreshDisplay();
+        }
       }
     });
-
   }
 }
 
