@@ -90,15 +90,32 @@ class IntegratedHUD extends AppServer {
     activeAppSession = session;
     this.refreshDisplay();
 
-    session.events.onTranscription((data) => {
-      console.log("Heard:", data.text);
-      if (!data.isFinal) return;
+        session.events.onTranscription((data) => {
+      // Log immediately so you can see the speed in Railway Logs
       const speech = data.text.toLowerCase();
+      console.log("Live Hearing:", speech);
+
+      // ACTION 1: Quick-Switch (Don't wait for isFinal)
+      // This makes the screen flip the MOMENT you finish saying the word
+      if (speech.includes("gym") || speech.includes("jim")) {
+        currentView = 'GYM';
+        this.currentDay = null; 
+        this.refreshDisplay();
+        // We don't return here because we want to see if they say a day next
+      }
       
-      if (speech.includes("off") || speech.includes("shut")) { currentView = 'OFF'; this.refreshDisplay(); return; }
-      if (speech.includes("gym") || speech.includes("jim")) { currentView = 'GYM'; this.currentDay = null; this.refreshDisplay(); return; }
-      if (speech.includes("macro")) { currentView = 'MACRO'; this.refreshDisplay(); return; }
-      if (speech.includes("menu")) { this.currentDay = null; this.refreshDisplay(); return; }
+      if (speech.includes("macro")) {
+        currentView = 'MACRO';
+        this.refreshDisplay();
+      }
+
+      if (speech.includes("off") || speech.includes("shut")) {
+        currentView = 'OFF';
+        this.refreshDisplay();
+      }
+
+      // ACTION 2: Progression (Use isFinal here to prevent double-skipping)
+      if (!data.isFinal) return;
 
       if (currentView === 'GYM' && !this.currentDay) {
         if (speech.includes("push")) this.currentDay = "push";
@@ -114,14 +131,9 @@ class IntegratedHUD extends AppServer {
           else if (this.exIdx < workouts[this.currentDay].length - 1) { this.exIdx++; this.setNum = 1; }
           this.refreshDisplay();
         }
-        if (speech.includes("back")) {
-          if (restTimer) { clearInterval(restTimer); restTimer = null; secondsRemaining = 0; }
-          if (this.setNum > 1) { this.setNum--; }
-          else if (this.exIdx > 0) { this.exIdx--; this.setNum = workouts[this.currentDay][this.exIdx].sets; }
-          this.refreshDisplay();
-        }
       }
     });
+
   }
 }
 
