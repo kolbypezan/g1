@@ -7,10 +7,8 @@ const PACKAGE_NAME = process.env.PACKAGE_NAME || 'com.kolbypezan.gymhud';
 const MENTRAOS_API_KEY = process.env.MENTRAOS_API_KEY || '';
 const PORT = parseInt(process.env.PORT || '8080'); 
 
-// Persistence: Ensure the data directory exists for cloud storage
-const DATA_DIR = path.join(process.cwd(), 'data');
-if (!fs.existsSync(DATA_DIR)) { fs.mkdirSync(DATA_DIR, { recursive: true }); }
-const MACRO_CACHE_PATH = path.join(DATA_DIR, 'macro-cache.json');
+// Persistence Logic: Hardened path for Railway
+const MACRO_CACHE_PATH = path.join(process.cwd(), 'macro-cache.json');
 
 let currentMacros = fs.existsSync(MACRO_CACHE_PATH) 
   ? JSON.parse(fs.readFileSync(MACRO_CACHE_PATH, 'utf-8')) 
@@ -92,21 +90,25 @@ class IntegratedHUD extends AppServer {
     session.events.onTranscription((data) => {
       const speech = data.text.toLowerCase();
       
-      // INSTANT COMMANDS (Navigation)
+      // NAVIGATION (Instant Response)
       if (speech.includes("off") || speech.includes("shut")) {
-        currentView = 'OFF'; this.refreshDisplay(); return;
+        currentView = 'OFF'; 
+        this.refreshDisplay();
+        return;
       }
       if (speech.includes("gym") || speech.includes("jim")) {
-        currentView = 'GYM'; this.currentDay = null; this.refreshDisplay(); return;
+        currentView = 'GYM'; 
+        this.currentDay = null; 
+        this.refreshDisplay();
+        return;
       }
       if (speech.includes("macro")) {
-        currentView = 'MACRO'; this.refreshDisplay(); return;
-      }
-      if (speech.includes("menu")) {
-        this.currentDay = null; this.refreshDisplay(); return;
+        currentView = 'MACRO'; 
+        this.refreshDisplay();
+        return;
       }
 
-      // PROGRESSION COMMANDS (Wait for isFinal to prevent double-skipping)
+      // DATA PROGRESSION (Wait for isFinal)
       if (!data.isFinal) return;
 
       if (currentView === 'GYM' && !this.currentDay) {
