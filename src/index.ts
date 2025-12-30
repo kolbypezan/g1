@@ -1,14 +1,17 @@
-const PACKAGE_NAME = process.env.PACKAGE_NAME || 'com.kolbypezan.gymhud';
-const MENTRAOS_API_KEY = process.env.MENTRAOS_API_KEY; // Let the cloud handle this
-const PORT = parseInt(process.env.PORT || '8080'); // Railway uses 8080 or random ports
 import { AppServer, AppSession, ViewType } from '@mentra/sdk';
 import { json } from 'body-parser';
 import fs from 'fs';
+import path from 'path';
 
+// 1. Configuration - ONLY DECLARED ONCE
 const PACKAGE_NAME = process.env.PACKAGE_NAME || 'com.kolbypezan.gymhud';
 const MENTRAOS_API_KEY = process.env.MENTRAOS_API_KEY || '';
-const PORT = parseInt(process.env.PORT || '3000');
-const MACRO_CACHE_PATH = './macro-cache.json';
+const PORT = parseInt(process.env.PORT || '8080'); 
+
+// 2. Persistence Logic
+const DATA_DIR = './data';
+if (!fs.existsSync(DATA_DIR)) { fs.mkdirSync(DATA_DIR); }
+const MACRO_CACHE_PATH = path.join(DATA_DIR, 'macro-cache.json');
 
 let currentMacros = fs.existsSync(MACRO_CACHE_PATH) 
   ? JSON.parse(fs.readFileSync(MACRO_CACHE_PATH, 'utf-8')) 
@@ -66,12 +69,10 @@ class IntegratedHUD extends AppServer {
 
   private refreshDisplay() {
     if (!activeAppSession) return;
-
     if (currentView === 'OFF') {
       activeAppSession.layouts.showTextWall("", { view: ViewType.MAIN });
       return;
     }
-
     if (currentView === 'MACRO') {
       const content = `MACROS\n------\nCAL: ${currentMacros.calories}\nPRO: ${currentMacros.protein}g\n\n(Say "Jim" or "Off")`;
       activeAppSession.layouts.showTextWall(content, { view: ViewType.MAIN });
@@ -113,20 +114,10 @@ class IntegratedHUD extends AppServer {
           else if (this.exIdx < workouts[this.currentDay].length - 1) { this.exIdx++; this.setNum = 1; }
           this.refreshDisplay();
         }
-       if (speech.includes("back")) {
-          // Turn off the timer when going back
-          if (restTimer) {
-            clearInterval(restTimer);
-            restTimer = null;
-            secondsRemaining = 0;
-          }
-
-          if (this.setNum > 1) { 
-            this.setNum--; 
-          } else if (this.exIdx > 0) { 
-            this.exIdx--; 
-            this.setNum = workouts[this.currentDay][this.exIdx].sets; 
-          }
+        if (speech.includes("back")) {
+          if (restTimer) { clearInterval(restTimer); restTimer = null; secondsRemaining = 0; }
+          if (this.setNum > 1) { this.setNum--; }
+          else if (this.exIdx > 0) { this.exIdx--; this.setNum = workouts[this.currentDay][this.exIdx].sets; }
           this.refreshDisplay();
         }
       }
