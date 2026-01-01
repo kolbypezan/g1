@@ -37,17 +37,28 @@ class IntegratedHUD extends AppServer {
     app.use(json());
 
     app.post('/api/macros', (req, res) => {
-      const metrics = req.body?.data?.metrics || [];
-      metrics.forEach((m: any) => {
-        const latestQty = m.data?.[0]?.qty || 0;
-        const name = m.name.toLowerCase();
-        if (name.includes("energy") || name.includes("calorie")) currentMacros.calories = Math.round(latestQty);
-        if (name.includes("protein")) currentMacros.protein = Math.round(latestQty);
-      });
-      fs.writeFileSync(MACRO_CACHE_PATH, JSON.stringify(currentMacros));
-      this.refreshDisplay();
-      res.sendStatus(200);
-    });
+  const metrics = req.body?.data?.metrics || [];
+  
+  metrics.forEach((m: any) => {
+    // Only update if the metric specifically refers to "consumed" or "actual"
+    const name = m.name.toLowerCase();
+    const latestQty = m.data?.[0]?.qty || 0;
+
+    // Filter out "Goal" or "Remaining" entries if the app sends them
+    if (name.includes("goal") || name.includes("remaining")) return;
+
+    if (name.includes("energy") || name.includes("calorie")) {
+      currentMacros.calories = Math.round(latestQty);
+    }
+    if (name.includes("protein")) {
+      currentMacros.protein = Math.round(latestQty);
+    }
+  });
+
+  fs.writeFileSync(MACRO_CACHE_PATH, JSON.stringify(currentMacros));
+  this.refreshDisplay();
+  res.sendStatus(200);
+});
   }
 
   private startRestTimer() {
