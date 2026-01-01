@@ -7,7 +7,6 @@ const PACKAGE_NAME = process.env.PACKAGE_NAME || 'com.kolbypezan.gymhud';
 const MENTRAOS_API_KEY = process.env.MENTRAOS_API_KEY || '';
 const PORT = parseInt(process.env.PORT || '8080'); 
 
-// Persistence Logic: Hardened path for Railway
 const MACRO_CACHE_PATH = path.join(process.cwd(), 'macro-cache.json');
 
 let currentMacros = fs.existsSync(MACRO_CACHE_PATH) 
@@ -66,20 +65,24 @@ class IntegratedHUD extends AppServer {
 
   private refreshDisplay() {
     if (!activeAppSession) return;
+    
     if (currentView === 'OFF') {
       activeAppSession.layouts.showTextWall("", { view: ViewType.MAIN });
       return;
     }
+
     if (currentView === 'MACRO') {
       const content = `MACROS\n------\nCAL: ${currentMacros.calories}\nPRO: ${currentMacros.protein}g\n\n(Say "Jim" or "Off")`;
       activeAppSession.layouts.showTextWall(content, { view: ViewType.MAIN });
-    } else if (this.currentDay) {
-      const ex = workouts[this.currentDay][this.exIdx];
-      const timerText = secondsRemaining > 0 ? `\nREST: ${secondsRemaining}s` : "";
-      const content = `${this.currentDay.toUpperCase()}\n${ex.name}\nSET ${this.setNum}/${ex.sets} | ${ex.reps}\nWT: ${ex.weight} LBS${timerText}\n\n(Say "Done" or "Back")`;
-      activeAppSession.layouts.showTextWall(content, { view: ViewType.MAIN });
-    } else {
-      activeAppSession.layouts.showTextWall("GYM HUD: SELECT DAY\nPUSH | PULL | LEGS\nWEAK | ABS", { view: ViewType.MAIN });
+    } else if (currentView === 'GYM') {
+      if (this.currentDay) {
+        const ex = workouts[this.currentDay][this.exIdx];
+        const timerText = secondsRemaining > 0 ? `\nREST: ${secondsRemaining}s` : "";
+        const content = `${this.currentDay.toUpperCase()}\n${ex.name}\nSET ${this.setNum}/${ex.sets} | ${ex.reps}\nWT: ${ex.weight} LBS${timerText}\n\n(Say "Done" or "Back")`;
+        activeAppSession.layouts.showTextWall(content, { view: ViewType.MAIN });
+      } else {
+        activeAppSession.layouts.showTextWall("GYM HUD: SELECT DAY\nPUSH | PULL | LEGS\nWEAK | ABS", { view: ViewType.MAIN });
+      }
     }
   }
 
@@ -88,47 +91,66 @@ class IntegratedHUD extends AppServer {
     this.refreshDisplay();
 
     session.events.onTranscription((data) => {
-      const speech = data.text.toLowerCase();
-      
-      // NAVIGATION (Instant Response)
-      if (speech.includes("off") || speech.includes("shut")) {
-        currentView = 'OFF'; 
-        this.refreshDisplay();
-        return;
-      }
-      if (speech.includes("gym") || speech.includes("jim")) {
-        currentView = 'GYM'; 
-        this.currentDay = null; 
-        this.refreshDisplay();
-        return;
-      }
-      if (speech.includes("macro")) {
-        currentView = 'MACRO'; 
-        this.refreshDisplay();
-        return;
-      }
-
-      // DATA PROGRESSION (Wait for isFinal)
+      // 1. Wait for finalized speech to prevent double-triggering
       if (!data.isFinal) return;
+      
+      const speech = data.text.toLowerCase();
+      console.log(`[HUD] Heard: ${speech}`); // Debug logs on your Mac terminal
 
+      // 2. GLOBAL NAVIGATION
+      if (speech.includes("off") || speech.includes("shut")) {
+        currentView = 'OFF';
+        this.refreshDisplay();
+        return;
+      }
+      if (speech.includes("gym") || speech.includes("jim") || speech.includes("gem")) {
+        currentView = 'GYM';
+        this.currentDay = null;
+        this.refreshDisplay();
+        return;
+      }
+      if (speech.includes("macro") || speech.includes("maker")) {
+        currentView = 'MACRO';
+        this.refreshDisplay();
+        return;
+      }
+
+      // 3. WORKOUT SELECTION LOGIC
       if (currentView === 'GYM' && !this.currentDay) {
         if (speech.includes("push")) this.currentDay = "push";
         else if (speech.includes("pull")) this.currentDay = "pull";
         else if (speech.includes("leg")) this.currentDay = "legs";
         else if (speech.includes("weak")) this.currentDay = "weakpoint";
         else if (speech.includes("abs")) this.currentDay = "abs";
-        if (this.currentDay) { this.exIdx = 0; this.setNum = 1; this.refreshDisplay(); }
-      } else if (currentView === 'GYM' && this.currentDay) {
-        if (speech.includes("done") || speech.includes("down")) {
+        
+        if (this.currentDay) { 
+          this.exIdx = 0; 
+          this.setNum = 1; 
+          this.refreshDisplay(); 
+        }
+      } 
+      // 4. EXERCISE PROGRESSION LOGIC
+      else if (currentView === 'GYM' && this.currentDay) {
+        // "Done" or misheard as "Down" / "Don"
+        if (speech.includes("done") || speech.includes("down") || speech.includes("don")) {
           this.startRestTimer();
-          if (this.setNum < workouts[this.currentDay][this.exIdx].sets) { this.setNum++; }
-          else if (this.exIdx < workouts[this.currentDay].length - 1) { this.exIdx++; this.setNum = 1; }
+          if (this.setNum < workouts[this.currentDay][this.exIdx].sets) {
+            this.setNum++;
+          } else if (this.exIdx < workouts[this.currentDay].length - 1) {
+            this.exIdx++;
+            this.setNum = 1;
+          }
           this.refreshDisplay();
         }
-        if (speech.includes("back")) {
+        
+        if (speech.includes("back") || speech.includes("bank")) {
           if (restTimer) { clearInterval(restTimer); restTimer = null; secondsRemaining = 0; }
-          if (this.setNum > 1) { this.setNum--; }
-          else if (this.exIdx > 0) { this.exIdx--; this.setNum = workouts[this.currentDay][this.exIdx].sets; }
+          if (this.setNum > 1) {
+            this.setNum--;
+          } else if (this.exIdx > 0) {
+            this.exIdx--;
+            this.setNum = workouts[this.currentDay][this.exIdx].sets;
+          }
           this.refreshDisplay();
         }
       }
